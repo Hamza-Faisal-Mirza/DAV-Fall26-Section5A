@@ -1,0 +1,156 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Penguin Data Analysis</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 30px;
+        }
+
+        svg {
+            display: block;
+            margin-bottom: 25px;
+        }
+
+        .bar {
+            fill: steelblue;
+        }
+
+        .highlight {
+            fill: red;
+        }
+
+        .axis text {
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+
+<h2>Penguin Data Analysis</h2>
+
+<label for="chartType">Choose chart:</label>
+<select id="chartType">
+    <option value="mass">Body Mass by Species</option>
+    <option value="flipper">Flipper Length by Species</option>
+    <option value="island">Body Mass by Island</option>
+</select>
+
+<svg id="chart" width="750" height="450"></svg>
+
+<script>
+const width = 750;
+const height = 450;
+const margin = {top: 30, right: 30, bottom: 70, left: 80};
+
+const innerWidth = width - margin.left - margin.right;
+const innerHeight = height - margin.top - margin.bottom;
+
+const svg = d3.select("#chart")
+    .append("g")
+    .attr("transform",
+        `translate(${margin.left},${margin.top})`);
+
+d3.csv("dataset/penguins.csv", d3.autoType).then(data => {
+
+    data = data.filter(d =>
+        d.species && d.island &&
+        Number.isFinite(d.body_mass_g) &&
+        Number.isFinite(d.flipper_length_mm)
+    );
+
+    function drawChart(type) {
+        let grouped;
+        let valueKey;
+        let groupKey;
+
+        if (type === "island") {
+            groupKey = "island";
+            valueKey = "body_mass_g";
+        } else {
+            groupKey = "species";
+            valueKey = type === "mass"
+                ? "body_mass_g"
+                : "flipper_length_mm";
+        }
+
+        grouped = Array.from(
+            d3.rollup(
+                data,
+                v => d3.mean(v, d => d[valueKey]),
+                d => d[groupKey]
+            ),
+            ([name, value]) => ({name, value})
+        );
+
+        const x = d3.scaleBand()
+            .domain(grouped.map(d => d.name))
+            .range([0, innerWidth])
+            .padding(0.25);
+
+        const y = d3.scaleLinear()
+            .domain([0, d3.max(grouped, d => d.value)])
+            .nice()
+            .range([innerHeight, 0]);
+
+        svg.selectAll("*").remove();
+
+        svg.append("g")
+            .attr("transform", `translate(0,${innerHeight})`)
+            .call(d3.axisBottom(x));
+
+        svg.append("g")
+            .call(d3.axisLeft(y));
+
+        svg.selectAll(".bar")
+            .data(grouped)
+            .join("rect")
+            .attr("class", d =>
+                d.name === "Gentoo" ? "bar highlight" : "bar"
+            )
+            .attr("x", d => x(d.name))
+            .attr("y", d => y(d.value))
+            .attr("width", x.bandwidth())
+            .attr("height", d => innerHeight - y(d.value));
+
+        svg.selectAll(".value-label")
+            .data(grouped)
+            .join("text")
+            .attr("class", "value-label")
+            .attr("x", d => x(d.name) + x.bandwidth() / 2)
+            .attr("y", d => y(d.value) - 8)
+            .attr("text-anchor", "middle")
+            .text(d => Math.round(d.value));
+
+        svg.append("text")
+            .attr("x", innerWidth / 2)
+            .attr("y", innerHeight + 50)
+            .attr("text-anchor", "middle")
+            .text(groupKey === "species" ? "Species" : "Island");
+
+        svg.append("text")
+            .attr("transform", "rotate(-90)")
+            .attr("x", -innerHeight / 2)
+            .attr("y", -55)
+            .attr("text-anchor", "middle")
+            .text(valueKey === "body_mass_g"
+                ? "Average Body Mass (g)"
+                : "Average Flipper Length (mm)");
+    }
+
+    drawChart("mass");
+
+    d3.select("#chartType").on("change", function() {
+        drawChart(this.value);
+    });
+}).catch(error => {
+    console.error("Error loading penguins.csv:", error);
+});
+</script>
+
+</body>
+</html>
