@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Task 1 - Course Enrollment Treemap</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; }
+  h2 { margin: 0 0 8px; }
+  .tooltip { position: absolute; pointer-events: none; background: rgba(0,0,0,.85); color: #fff;
+             padding: 6px 10px; border-radius: 4px; font-size: 13px; opacity: 0; }
+  .legend text { font-size: 13px; }
+</style>
+</head>
+<body>
+<h2>University Course Enrollment (area = number of students)</h2>
+<div id="chart"></div>
+<div class="tooltip" id="tip"></div>
+<script>
+const width = 900, height = 520, legendH = 40;
+
+const svg = d3.select("#chart").append("svg").attr("width", width).attr("height", height + legendH);
+const tip = d3.select("#tip");
+
+d3.csv("dataset/university.csv", d3.autoType).then(data => {
+  // flat rows -> nested Map: department -> course rows
+  const grouped = d3.group(data, d => d.department);
+  // build hierarchy: University -> Department -> Course
+  const tree = {
+    name: "University",
+    children: Array.from(grouped, ([dept, rows]) => ({
+      name: dept,
+      children: rows.map(r => ({ name: r.course, department: dept, value: r.students }))
+    }))
+  };
+  const h = d3.hierarchy(tree).sum(d => d.value).sort((a, b) => b.value - a.value);
+
+  d3.treemap().size([width, height]).paddingInner(2).paddingOuter(3).paddingTop(4).round(true)(h);
+  // layout has now added x0, y0, x1, y1 to every node
+
+  const depts = tree.children.map(d => d.name);
+  const color = d3.scaleOrdinal().domain(depts).range(d3.schemeTableau10);
+
+  const leaf = svg.selectAll("g.leaf").data(h.leaves()).join("g")
+      .attr("class", "leaf")
+      .attr("transform", d => `translate(${d.x0},${d.y0})`);
+
+  leaf.append("rect")
+      .attr("width", d => d.x1 - d.x0)
+      .attr("height", d => d.y1 - d.y0)
+      .attr("fill", d => color(d.data.department))
+      .attr("stroke", "#fff")
+      .on("mousemove", (event, d) => {
+        tip.style("opacity", 1)
+           .style("left", (event.pageX + 12) + "px").style("top", (event.pageY + 12) + "px")
+           .html(`<b>${d.data.name}</b><br>Department: ${d.data.department}<br>Students: ${d.value}`);
+      })
+      .on("mouseleave", () => tip.style("opacity", 0));
+
+  leaf.append("clipPath").attr("id", (d, i) => "clip" + i)
+      .append("rect").attr("width", d => d.x1 - d.x0).attr("height", d => d.y1 - d.y0);
+
+  leaf.append("text")
+      .attr("clip-path", (d, i) => `url(#clip${i})`)
+      .attr("x", 6).attr("y", 18)
+      .attr("fill", "#fff").attr("font-size", 13).attr("font-weight", "bold")
+      .style("pointer-events", "none")
+      .text(d => d.data.name);
+
+  // Title is the <h2>; legend below the chart
+  const legend = svg.append("g").attr("class", "legend").attr("transform", `translate(0,${height + 20})`);
+  let xPos = 0;
+  depts.forEach(name => {
+    const g = legend.append("g").attr("transform", `translate(${xPos},0)`);
+    g.append("rect").attr("width", 14).attr("height", 14).attr("fill", color(name));
+    const t = g.append("text").attr("x", 20).attr("y", 12).text(name);
+    xPos += 20 + t.node().getComputedTextLength() + 30;
+  });
+});
+</script>
+</body>
+</html>

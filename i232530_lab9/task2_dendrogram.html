@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Task 2 - University Structure Dendrogram</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; }
+  .link { fill: none; stroke: #999; stroke-width: 1.5px; }
+  .node circle { stroke: #333; stroke-width: 1px; }
+  .node.dept circle { cursor: pointer; }
+  .legend text { font-size: 13px; }
+</style>
+</head>
+<body>
+<h2>University Structure Dendrogram</h2>
+<p>Click a department to collapse / expand its courses.</p>
+<div id="chart"></div>
+<script>
+const width = 900, height = 520;
+const margin = { top: 20, right: 190, bottom: 20, left: 190 };
+const innerW = width - margin.left - margin.right;
+const innerH = height - margin.top - margin.bottom;
+
+const svg = d3.select("#chart").append("svg").attr("width", width).attr("height", height);
+const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+const linkG = g.append("g");
+const nodeG = g.append("g");
+
+const color = d3.scaleOrdinal().domain([0, 1, 2]).range(["#264653", "#2a9d8f", "#e76f51"]);
+const depthName = ["University (root)", "Department", "Course"];
+
+// legend
+const legend = svg.append("g").attr("class", "legend").attr("transform", `translate(10,${height - 80})`);
+depthName.forEach((n, i) => {
+  const r = legend.append("g").attr("transform", `translate(0,${i * 20})`);
+  r.append("circle").attr("r", 6).attr("cx", 6).attr("cy", 6).attr("fill", color(i));
+  r.append("text").attr("x", 18).attr("y", 10).text(n);
+});
+
+d3.csv("dataset/university.csv", d3.autoType).then(data => {
+  const tree = {
+    name: "University",
+    children: Array.from(d3.group(data, d => d.department), ([dept, rows]) => ({
+      name: dept,
+      children: rows.map(r => ({ name: r.course, value: r.students }))
+    }))
+  };
+  const root = d3.hierarchy(tree);
+  const cluster = d3.cluster().size([innerH, innerW]);
+  const linkGen = d3.linkHorizontal().x(d => d.y).y(d => d.x);   // curved links
+
+  function update() {
+    cluster(root);                                  // adds x, y to each node
+
+    linkG.selectAll("path").data(root.links(), d => d.target.data.name)
+      .join("path").attr("class", "link")
+      .transition().duration(400).attr("d", linkGen);
+
+    const node = nodeG.selectAll("g.node").data(root.descendants(), d => d.data.name)
+      .join(enter => {
+        const e = enter.append("g").attr("class", d => "node " + (d.depth === 1 ? "dept" : ""));
+        e.append("circle").attr("r", 7);
+        e.append("text").attr("dy", "0.32em");
+        return e;
+      });
+
+    node.classed("dept", d => d.depth === 1)
+      .on("click", (event, d) => {
+        if (d.depth !== 1) return;
+        if (d.children) { d._children = d.children; d.children = null; }
+        else { d.children = d._children; d._children = null; }
+        update();
+      });
+
+    node.transition().duration(400).attr("transform", d => `translate(${d.y},${d.x})`);
+
+    node.select("circle")
+      .attr("fill", d => color(d.depth))
+      .attr("stroke-width", d => d._children ? 3 : 1);   // thicker ring = collapsed
+
+    // parent labels on the left (raised so they sit above the incoming link), leaf labels on the right
+    node.select("text")
+      .attr("x", d => d.children ? -12 : 12)
+      .attr("dy", d => d.children ? "-0.7em" : "0.32em")
+      .attr("text-anchor", d => d.children ? "end" : "start")
+      .text(d => d.data.name + (d._children ? " (+" + d._children.length + ")" : ""));
+  }
+  update();
+});
+</script>
+</body>
+</html>

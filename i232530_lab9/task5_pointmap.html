@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Task 5 - Pakistan Cities Point Map</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; }
+  .tooltip { position: absolute; pointer-events: none; background: rgba(0,0,0,.85); color: #fff;
+             padding: 6px 10px; border-radius: 4px; font-size: 13px; opacity: 0; }
+  .label { font-size: 12px; font-weight: bold; pointer-events: none; }
+</style>
+</head>
+<body>
+<h2>Largest Cities of Pakistan (circle area = population)</h2>
+<div id="chart"></div>
+<div class="tooltip" id="tip"></div>
+<script>
+const width = 700, height = 700;
+const svg = d3.select("#chart").append("svg").attr("width", width).attr("height", height);
+const tip = d3.select("#tip");
+
+Promise.all([
+  d3.json("dataset/world.geojson"),
+  d3.csv("dataset/pakistan_cities.csv", d3.autoType)
+]).then(([world, cities]) => {
+  const pakistan = world.features.find(f => f.id === "PAK");
+
+  // Mercator zoomed/centered on Pakistan
+  const projection = d3.geoMercator().fitExtent([[40, 40], [width - 40, height - 40]], pakistan);
+  const path = d3.geoPath(projection);
+
+  // all countries (neighbours in light gray), Pakistan highlighted
+  svg.append("g").selectAll("path").data(world.features).join("path")
+    .attr("d", path)
+    .attr("fill", d => d.id === "PAK" ? "#e8f1e4" : "#f2f2f2")
+    .attr("stroke", "#999");
+
+  const r = d3.scaleSqrt().domain([0, d3.max(cities, d => d.pop)]).range([0, 45]);
+
+  const g = svg.append("g").selectAll("circle").data(cities).join("circle")
+    .attr("cx", d => projection([d.lon, d.lat])[0])      // longitude first
+    .attr("cy", d => projection([d.lon, d.lat])[1])
+    .attr("r", d => r(d.pop))
+    .attr("fill", "steelblue").attr("fill-opacity", 0.5)
+    .attr("stroke", "steelblue").attr("stroke-width", 1)
+    .on("mousemove", (event, d) => {
+      tip.style("opacity", 1).style("left", event.pageX + 12 + "px").style("top", event.pageY + 12 + "px")
+         .html(`<b>${d.name}</b><br>Population: ${d.pop} million`);
+    })
+    .on("mouseleave", () => tip.style("opacity", 0));
+
+  // labels only for cities above 1 million
+  svg.append("g").selectAll("text").data(cities.filter(d => d.pop > 1)).join("text")
+    .attr("class", "label")
+    .attr("x", d => projection([d.lon, d.lat])[0] + r(d.pop) + 4)
+    .attr("y", d => projection([d.lon, d.lat])[1] + 4)
+    .text(d => d.name);
+});
+</script>
+</body>
+</html>
